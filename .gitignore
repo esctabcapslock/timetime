@@ -4,3 +4,4 @@ Cargo.lock
 *.sqlite
 clients/electron-quick-start
 clients/tray-item-rs
+webview2

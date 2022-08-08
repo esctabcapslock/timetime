@@ -1,19 +1,19 @@
 use std::os::windows::prelude::{OsStrExt};
-use std::{thread,time, default};
+use std::{thread,time};
 use windows::Win32::{
     UI::WindowsAndMessaging::*,
     UI::Shell,
-    Graphics::Gdi::{UpdateWindow,HBRUSH},
-    System::{Console,LibraryLoader},
-    Foundation::{HINSTANCE,HWND,LPARAM,WPARAM,POINT,RECT,LRESULT,GetLastError},
+    Graphics::Gdi::{HBRUSH},
+    System::{LibraryLoader},//Console,
+    Foundation::{HINSTANCE,HWND,LPARAM,WPARAM,POINT,LRESULT,GetLastError},//RECT,
 };
 use windows::core::{PCWSTR};
 
 mod nowstate{
     struct NowState{
-        pub now_running_window_name:String,
-        pub now_running_window_path:String,
-        pub now_date:u128
+        pub window_name:String,
+        pub window_path:String,
+        pub date:u128
     }
 
     use std::time;
@@ -21,6 +21,15 @@ mod nowstate{
     use std::os::windows::prelude::{OsStringExt};
     use rusqlite::{Connection, };
 
+    impl NowState{
+        fn can_record(&self, last_state:&NowState) -> bool{
+            if (last_state.window_name == self.window_name) && (last_state.window_path == self.window_path) && (self.date - last_state.date < 1000*60){
+                false
+            }else{
+                true
+            }
+        }
+    }
 
     fn get_now() -> Result<NowState,String> {
 
@@ -79,9 +88,9 @@ mod nowstate{
 
 
             return Ok(NowState {
-                now_running_window_name:now_running_window_name,
-                now_running_window_path:now_running_window_path,
-                now_date:time,
+                window_name:now_running_window_name,
+                window_path:now_running_window_path,
+                date:time,
             })
 
             // GetModuleFileNameA(p0, &mut lpstring);
@@ -90,28 +99,55 @@ mod nowstate{
         }
     }
 
-    pub fn record(conn:&Connection){
-        let nowstate = get_now();
-        let nowstate = match nowstate {
-            Ok(now)=>now,
-            Err(msg) => {
-                println!("Error occurred, msg: {}",msg);
-                return ;
+    pub struct Records{
+        last:Option<NowState>
+    }
+
+        pub fn create_records()->Records{
+            Records{
+                last:None,
             }
-        };
-        // println!("nowstate: {:?}",nowstate);
-    
-        conn.execute(
-            "INSERT INTO history (name, path, time) values (?1, ?2, ?3)",
-            (&nowstate.now_running_window_name, &nowstate.now_running_window_path, &(nowstate.now_date as i64)),
-        ).unwrap();
+        }
+
+    impl Records{
+
+        pub fn record(&mut self, conn:&Connection){
+            let nowstate = get_now();
+            let nowstate = match nowstate {
+                Ok(now)=>now,
+                Err(msg) => {
+                    println!("Error occurred, msg: {}",msg);
+                    return ;
+                }
+            };
+
+            
+            fn conn_execure(nowstate:&NowState, conn:&Connection){
+                println!("[run conn_execure]");
+                conn.execute(
+                    "INSERT INTO history (name, path, time) values (?1, ?2, ?3)",
+                    (&nowstate.window_name, &nowstate.window_path, &(nowstate.date as i64)),
+                ).unwrap();
+            }
+            // println!("nowstate: {:?}",nowstate);
+
+            if let Some(last_state) = &self.last{
+                if nowstate.can_record(last_state){
+                    conn_execure(&nowstate,conn)
+                }
+            }else{
+                conn_execure(&nowstate,conn)
+            }
+
+            self.last = Some(nowstate);
+        }
     }
 
    pub fn record_setup()->Connection{
         let conn = Connection::open("history.sqlite").unwrap();
 
         conn.execute("CREATE TABLE if not exists history (
-            time INTEGER PRIMARY KEY,
+            time INTEGER PRIMARY KEY NOT NULL UNIQUE,
             name TEXT NOT NULL,
             path TEXT NOT NULL
         );", ()).unwrap();
@@ -133,7 +169,7 @@ fn str_to_osstring(s:&str)-> [u16;128]{
 
 fn create_msgbox(){
     //https://wesleywiser.github.io/post/rust-windows-messagebox-hello-world/
-    let k = unsafe{MessageBoxW(
+    let _k = unsafe{MessageBoxW(
         None, 
         PCWSTR::from_raw(&mut str_to_osstring("body") as *mut u16), 
         PCWSTR::from_raw(&mut str_to_osstring("title") as *mut u16), 
@@ -154,7 +190,7 @@ fn main(){
     use std::env;
     env::set_var("RUST_BACKTRACE", "1");
     let conn = nowstate::record_setup();
-    let dur_sleep = time::Duration::from_secs(10);
+    let dur_sleep = time::Duration::from_secs(4);
 
 
     // https://stackoverflow.com/questions/54047397/how-to-make-a-tray-icon-for-windows-using-the-winapi-crate
@@ -197,7 +233,7 @@ fn main(){
             // AppendMenuW(hMenu, MF_STRING, IDM_CONTEXT_LINE, "Line");
             TrackPopupMenu(h_menu, TPM_BOTTOMALIGN, pt.x, pt.y, 0, hWnd, std::ptr::null_mut());
         }
-    };
+    }
 
     unsafe extern "system" fn wnd_proc (hWND:HWND, message:u32, wPARM:WPARAM, lParam:LPARAM)->LRESULT {
         // println!("[wnd_proc], message:{}, WM_MYMESSAGE:{}, WM_MENUCOMMAND:{}, WM_USER:{}, WM_DESTROY:{}",message,WM_MYMESSAGE,WM_MENUCOMMAND,WM_USER, WM_DESTROY);
@@ -275,29 +311,34 @@ fn main(){
     
     let mut nid = Shell::NOTIFYICONDATAW::default();
     nid.cbSize = std::mem::size_of::<Shell::NOTIFYICONDATAW>() as u32;
-    unsafe{nid.hWnd = window_hwnd} 
+    nid.hWnd = window_hwnd;
     nid.uID = 1001;
     nid.uCallbackMessage = WM_MYMESSAGE;
     unsafe{ nid.hIcon = LoadIconW(HINSTANCE::default(), IDI_APPLICATION).unwrap(); }//icon idk
-    nid.szTip = str_to_osstring("1");
+    nid.szTip = str_to_osstring("2");
     nid.uFlags = Shell::NIF_MESSAGE | Shell::NIF_ICON | Shell::NIF_TIP; 
     // nid.hWnd.call
 
     unsafe{Shell::Shell_NotifyIconW(Shell::NIM_ADD,&mut nid as *mut Shell::NOTIFYICONDATAW)};
     // NIM_ADD, NIM_MODIFY, NIM_DELETE
+
+
+    let mut records = nowstate::create_records();
+    thread::spawn(move || {
+        loop{
+            records.record(&conn);
+            thread::sleep(dur_sleep);
+        }
+    });
+
     
     unsafe{
         let mut lpmsg = MSG::default();
 
-        while GetMessageW(&mut lpmsg as *mut MSG, HWND::default(), 0, 0).as_bool(){
-            TranslateMessage(&mut lpmsg);
-            DispatchMessageW(&mut lpmsg);
-        }
+            while GetMessageW(&mut lpmsg as *mut MSG, HWND::default(), 0, 0).as_bool(){
+                TranslateMessage(&mut lpmsg);
+                DispatchMessageW(&mut lpmsg);
+            }
     }
 
-
-    loop{
-        nowstate::record(&conn);
-        thread::sleep(dur_sleep);
-    }
 }

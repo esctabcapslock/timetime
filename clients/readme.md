@@ -1,0 +1,1 @@
+https://github.com/WiseLibs/better-sqlite3/issues/549
