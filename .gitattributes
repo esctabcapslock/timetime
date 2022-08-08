@@ -1,1 +1,2 @@
-clients/dist/** linguist-vendored
+clients/dist/** linguist-documentation
+clients/dist/asset** linguist-documentation
