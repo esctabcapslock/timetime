@@ -5,13 +5,38 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>timetime</title>
+    <script src="./preload.js"></script>
     <script src="./d3.min.js"></script>
     <script src="./chart.js"></script>
+    <!-- <script src="./data.js"></script> -->
+    <script src="./timeline.js"></script>
 </head>
 <body>
     <h1>기록</h1>
     
     <!-- <svg width = "500" height = "500"></svg> -->
+    <div>
+        <h3>막대차트</h3>
+        <div id="stackchart_view"></div>
+    </div>
+    <div>
+        <h3>파이차트</h3>
+        <div id="piechart_view"></div>
+    </div>
+    <div>
+        <h3>타임라인</h3>
+        <div id="timeline_ctrl">
+            <div>
+                <div><button id="timeline_ctrl_btn_min">←</button></div>
+                <div><button id="timeline_ctrl_btn_add">→</button></div>
+                <div>현재:<span id="timeline_ctrl_now"></span></div>
+                <div>범위:<span id="timeline_ctrl_range"></span></div>
+            </div>
+        </div>
+        <div id="timeline_view"></div>
+    </div>
+
     <script src="./main.js"></script>
+
 </body>
 </html>

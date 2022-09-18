@@ -10,6 +10,8 @@ use windows::Win32::{
 use windows::core::{PCWSTR};
 
 mod nowstate{
+
+    // #[derive(Debug)]
     struct NowState{
         pub window_name:String,
         pub window_path:String,
@@ -21,16 +23,6 @@ mod nowstate{
     use std::os::windows::prelude::{OsStringExt};
     use rusqlite::{Connection, };
 
-    impl NowState{
-        fn can_record(&self, last_state:&NowState) -> bool{
-            if (last_state.window_name == self.window_name) && (last_state.window_path == self.window_path) && (self.date - last_state.date < 1000*60){
-                false
-            }else{
-                true
-            }
-        }
-    }
-
     fn get_now() -> Result<NowState,String> {
 
         let time = time::SystemTime::now()
@@ -40,11 +32,9 @@ mod nowstate{
 
         unsafe {
             let p0 = GetForegroundWindow();
-            // println!("GetForegroundWindow: {:?}",p0);
             let mut lpstring:[u16;128] = [0; 128]; 
             let lpstring_len = GetWindowTextW(p0, &mut lpstring);
-            println!("now_running_window_name 길이 {}",lpstring_len);
-            // println!("lpstring: {:?}",lpstring);
+
 
             let kk = std::ffi::OsString::from_wide(&lpstring[0..(lpstring_len as usize)]).into_string();
             let now_running_window_name = kk.unwrap();
@@ -54,7 +44,6 @@ mod nowstate{
 
             let mut lpdwprocessid:u32=0;
             GetWindowThreadProcessId(p0,  &mut lpdwprocessid as *mut u32);
-            // println!("lpdwprocessid: {}", lpdwprocessid);
 
             if lpdwprocessid==0{
                 println!("pid is zero!");
@@ -79,12 +68,9 @@ mod nowstate{
                 }
             }
 
-            // println!("QueryFullProcessImageNameW lpexename: {:?}", lpexename);
             let kk = std::ffi::OsString::from_wide(&lpexename[0..lpexename_len]).into_string();
             let now_running_window_path = kk.unwrap();
             println!("now_running_window_path: {}",now_running_window_path);
-            // let handle = OpenProcess(0, p0, lpdwprocessid).unwrap();
-            // handle
 
 
             return Ok(NowState {
@@ -92,54 +78,87 @@ mod nowstate{
                 window_path:now_running_window_path,
                 date:time,
             })
-
-            // GetModuleFileNameA(p0, &mut lpstring);
-            // let sss = std::str::from_utf8(&lpstring).expect("invalid utf-8 sequence");
-            // println!("GetModuleFileNameA: {}", sss);
         }
     }
 
     pub struct Records{
-        last:Option<NowState>
+        last:Option<NowState>, // last get value 
+        last_time:u128, // last records time
+        last_recorded:bool,
     }
 
-        pub fn create_records()->Records{
-            Records{
-                last:None,
-            }
+    pub fn create_records()->Records{
+        Records{
+            last:None,
+            last_time:0,
+            last_recorded:false,
         }
+    }
 
     impl Records{
 
+        
+
         pub fn record(&mut self, conn:&Connection){
+
+
+            let conn_execure = |nowstate:&NowState, conn:&Connection, last_time:&mut u128|{
+                println!("[run conn_execure] name:{}",nowstate.window_name);
+                *last_time = nowstate.date; // self.last_time의 값을 변경.
+                // println!("detail: {:?}",nowstate);
+                conn.execute(
+                    "INSERT INTO history (name, path, time) values (?1, ?2, ?3)",
+                    (&nowstate.window_name, &nowstate.window_path, &(nowstate.date as i64)),
+                ).unwrap();
+            };
+
             let nowstate = get_now();
             let nowstate = match nowstate {
                 Ok(now)=>now,
                 Err(msg) => {
                     println!("Error occurred, msg: {}",msg);
+
+                    if self.last_recorded==false {
+                        if let Some(last)=&self.last{
+                            conn_execure(last,conn,&mut self.last_time);
+                        }
+                    }
+                    self.last = None;
+                    self.last_recorded = false;
                     return ;
                 }
             };
 
+
+            let same_windows = |last_state:&NowState| -> bool{
+                (last_state.window_name == nowstate.window_name) && (last_state.window_path == nowstate.window_path)
+            };
+
+            let time_can_record = || -> bool{
+                nowstate.date - self.last_time > 1000*60
+            };
             
-            fn conn_execure(nowstate:&NowState, conn:&Connection){
-                println!("[run conn_execure]");
-                conn.execute(
-                    "INSERT INTO history (name, path, time) values (?1, ?2, ?3)",
-                    (&nowstate.window_name, &nowstate.window_path, &(nowstate.date as i64)),
-                ).unwrap();
-            }
-            // println!("nowstate: {:?}",nowstate);
 
             if let Some(last_state) = &self.last{
-                if nowstate.can_record(last_state){
-                    conn_execure(&nowstate,conn)
+                if same_windows(last_state){ // last is not same
+                    if time_can_record(){
+                        conn_execure(&nowstate,conn,&mut self.last_time);
+                        self.last_recorded = true;
+                    }else{
+                        self.last_recorded = false;
+                    }
+                }else{ 
+                    if self.last_recorded == false {
+                        conn_execure(&last_state,conn,&mut self.last_time);
+                    }
+                    conn_execure(&nowstate,conn,&mut self.last_time);
+                    self.last_recorded = true;
                 }
             }else{
-                conn_execure(&nowstate,conn)
+                conn_execure(&nowstate,conn,&mut self.last_time);
+                self.last_recorded = true;
             }
-
-            self.last = Some(nowstate);
+            self.last = Some(nowstate); 
         }
     }
 
@@ -190,7 +209,7 @@ fn main(){
     use std::env;
     env::set_var("RUST_BACKTRACE", "1");
     let conn = nowstate::record_setup();
-    let dur_sleep = time::Duration::from_secs(4);
+    let dur_sleep = time::Duration::from_secs(1);
 
 
     // https://stackoverflow.com/questions/54047397/how-to-make-a-tray-icon-for-windows-using-the-winapi-crate
@@ -330,15 +349,13 @@ fn main(){
             thread::sleep(dur_sleep);
         }
     });
-
     
     unsafe{
         let mut lpmsg = MSG::default();
-
-            while GetMessageW(&mut lpmsg as *mut MSG, HWND::default(), 0, 0).as_bool(){
-                TranslateMessage(&mut lpmsg);
-                DispatchMessageW(&mut lpmsg);
-            }
+        while GetMessageW(&mut lpmsg as *mut MSG, HWND::default(), 0, 0).as_bool(){
+            TranslateMessage(&mut lpmsg);
+            DispatchMessageW(&mut lpmsg);
+        }
     }
 
 }

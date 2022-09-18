@@ -207,7 +207,21 @@ function StackedBarChart(data, {
     .attr("x", ({ i }) => xScale(X[i]))
     .attr("y", ([y1, y2]) => Math.min(yScale(y1), yScale(y2)))
     .attr("height", ([y1, y2]) => Math.abs(yScale(y1) - yScale(y2)))
-    .attr("width", xScale.bandwidth());
+    .attr("width", xScale.bandwidth())
+    .on("mouseover", function (event) { 
+      console.log('darker',this,event, event.attr)
+      // d3.select(this).select("rect").
+      // bar.attr("fill", color(Z[i]).darker())
+
+      // tooltip
+      //     .style("opacity", 1)
+      //     .html(getTooltipContent(d.path, d.color, s, e, d.total, dur))
+  })
+  // .on("mouseleave", function (e) {
+  //     // d3.select(this).select("rect").
+  //     bar.attr("fill", d.color)
+  //     // tooltip.style("opacity", 0)
+  // })
 
   if (title) bar.append("title")
     .text(({ i }) => title(i));
@@ -257,7 +271,8 @@ function DonutChart(data, {
 
   // Compute titles.
   if (title === undefined) {
-    const formatValue = d3.format(format);
+    // const formatValue = d3.format(format);
+    const formatValue = totalString// d3.format(format);
     title = i => `${N[i]}\n${formatValue(V[i])}`;
   } else {
     const O = d3.map(data, d => d);

@@ -6,4 +6,4 @@ Using Process.GetProcesses(); method you can get all running application and if 
 https://docs.rs/windows/latest/windows/index.html
 https://microsoft.github.io/windows-docs-rs/doc/windows/index.html
 - 아래껏이 맞음
-- Crate windows 문서    
+- Crate windows 문서

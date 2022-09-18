@@ -1,4 +1,3 @@
-import { resolve } from 'path';
 import sqlite3 = require('sqlite3');
 
 // import Sqlite = require('better-sqlite3');
@@ -13,8 +12,11 @@ const db = new sqlite3.Database('../history.sqlite');
 export function getHistoryData(dur_days:number, timezone:number, ):Promise<{time:number,name:string,path:string}[]>{
     return new Promise((resolve)=>{
     
-    const day =  ((Date.now()/(24*3600*1000)|0)-dur_days)*24*3600*1000 + timezone*3600*1000
-    db.all(`SELECT * FROM history  WHERE time>?`,day,(err,rows)=>{
+    const day =  ((Date.now()/(24*3600_000)|0)-dur_days)*24*3600_000 - timezone*3600_000
+    console.log('[sql]',`SELECT * FROM history  WHERE time>?`,day);
+    db.all(`SELECT * FROM history`,(err,rows)=>{
+    // db.all(`SELECT * FROM history  WHERE time>?`,day,(err,rows)=>{
+        console.log('[length]',rows.length)
         resolve(rows)
     })
     })
@@ -23,4 +25,5 @@ export function getHistoryData(dur_days:number, timezone:number, ):Promise<{time
     // return row
 }
 
-console.log(getHistoryData(5,9))
+// only test
+// console.log(getHistoryData(5,9))

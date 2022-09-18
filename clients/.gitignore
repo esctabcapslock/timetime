@@ -1,2 +1,4 @@
 /node_modules
 /package-lock.json
+/src/asset/data.js
+/src/asset/d3.min.js
